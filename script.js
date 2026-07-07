@@ -11,8 +11,7 @@ import {
 const firebaseConfig = {
   apiKey: "AIzaSyAwDf9GT864-kqW4J5RtaCE5mlQgmYJS8g",
   authDomain: "tanabata-wishes.firebaseapp.com",
-  databaseURL:
-    "https://tanabata-wishes-default-rtdb.asia-southeast1.firebasedatabase.app",
+  databaseURL: "https://tanabata-wishes-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "tanabata-wishes",
   storageBucket: "tanabata-wishes.firebasestorage.app",
   messagingSenderId: "605416394989",
@@ -24,234 +23,299 @@ const database = getDatabase(app);
 
 const wishesRef = ref(database, "wishes");
 
-let wishes = [];
-let currentIndex = 0;
+const carousel = document.getElementById("carousel");
+const prevButton = document.getElementById("prev");
+const nextButton = document.getElementById("next");
 
 const form = document.getElementById("wishForm");
 const nameInput = document.getElementById("name");
 const categoryInput = document.getElementById("grade");
 const wishInput = document.getElementById("wish");
+const status = document.getElementById("status");
+const totalLikes = document.getElementById("totalLikes");
 
-const card = document.getElementById("wishCard");
-const cardName = document.getElementById("cardName");
-const cardGrade = document.getElementById("cardGrade");
-const cardWish = document.getElementById("cardWish");
+const sortButtons = document.querySelectorAll(".sort button");
 
-const likeButton = document.getElementById("likeButton");
-const likeCount = document.getElementById("likeCount");
+let wishes = [];
+let currentIndex = 0;
+let currentSort = "new";
 
-const prevButton = document.getElementById("prevButton");
-const nextButton = document.getElementById("nextButton");
+function getSortedWishes() {
+  const sorted = [...wishes];
 
-function showWish(index) {
-  if (wishes.length === 0) {
-    cardName.textContent = "七夕";
-    cardGrade.textContent = "願いごと";
-    cardWish.textContent = "最初の願いごとを書いてみよう";
-    likeCount.textContent = "0";
+  if (currentSort === "likes") {
+    sorted.sort((a, b) => {
+      return (b.likes || 0) - (a.likes || 0);
+    });
+  } else {
+    sorted.sort((a, b) => {
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+  }
 
-    if (likeButton) {
-      likeButton.disabled = true;
-    }
+  return sorted;
+}
+
+function updateTotalLikes() {
+  const total = wishes.reduce((sum, wish) => {
+    return sum + (wish.likes || 0);
+  }, 0);
+
+  totalLikes.textContent = total;
+}
+
+function renderWish() {
+  const sortedWishes = getSortedWishes();
+
+  if (sortedWishes.length === 0) {
+    carousel.innerHTML = `
+      <div class="loading">
+        まだ願いごとはありません。<br>
+        最初の願いごとを書いてみよう 🎋
+      </div>
+    `;
 
     return;
   }
 
-  if (index < 0) {
-    currentIndex = wishes.length - 1;
-  } else if (index >= wishes.length) {
-    currentIndex = 0;
-  } else {
-    currentIndex = index;
+  if (currentIndex < 0) {
+    currentIndex = sortedWishes.length - 1;
   }
 
-  const wish = wishes[currentIndex];
-
-  cardName.textContent = wish.name || "匿名";
-  cardGrade.textContent = wish.category || wish.grade || "その他";
-  cardWish.textContent = wish.wish || "";
-  likeCount.textContent = wish.likes || 0;
-
-  if (likeButton) {
-    likeButton.disabled = false;
-  }
-
-  if (card) {
-    card.classList.remove("card-change");
-
-    void card.offsetWidth;
-
-    card.classList.add("card-change");
-  }
-}
-
-onValue(wishesRef, (snapshot) => {
-  const data = snapshot.val();
-
-  wishes = [];
-
-  if (data) {
-    Object.entries(data).forEach(([id, wish]) => {
-      wishes.push({
-        id,
-        ...wish
-      });
-    });
-  }
-
-  wishes.sort((a, b) => {
-    return (a.createdAt || 0) - (b.createdAt || 0);
-  });
-
-  if (currentIndex >= wishes.length) {
+  if (currentIndex >= sortedWishes.length) {
     currentIndex = 0;
   }
 
-  showWish(currentIndex);
-});
+  const wish = sortedWishes[currentIndex];
 
-if (form) {
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
+  carousel.innerHTML = `
+    <article class="wish-card">
+      <div class="hole"></div>
 
-    const name = nameInput.value.trim();
-    const category = categoryInput.value;
-    const wish = wishInput.value.trim();
+      <h3>${escapeHTML(wish.name || "匿名")}</h3>
 
-    if (!name || !category || !wish) {
-      alert("すべて入力してください");
-      return;
-    }
+      <span class="grade">
+        ${escapeHTML(wish.category || "その他")}
+      </span>
 
-    try {
-      await push(wishesRef, {
-        name,
-        category,
-        wish,
-        likes: 0,
-        createdAt: Date.now()
-      });
+      <p class="wish-text">
+        ${escapeHTML(wish.wish || "")}
+      </p>
 
-      form.reset();
+      <button
+        class="like-button"
+        id="currentLikeButton"
+        type="button"
+      >
+        ♥ <span>${wish.likes || 0}</span>
+      </button>
+    </article>
+  `;
 
-      alert("願いごとを短冊に込めました 🎋");
-    } catch (error) {
-      console.error(error);
+  const likeButton = document.getElementById("currentLikeButton");
 
-      alert(
-        "願いごとの投稿に失敗しました。もう一度試してください。"
-      );
-    }
-  });
-}
-
-if (prevButton) {
-  prevButton.addEventListener("click", () => {
-    if (wishes.length === 0) {
-      return;
-    }
-
-    currentIndex--;
-
-    if (currentIndex < 0) {
-      currentIndex = wishes.length - 1;
-    }
-
-    showWish(currentIndex);
-  });
-}
-
-if (nextButton) {
-  nextButton.addEventListener("click", () => {
-    if (wishes.length === 0) {
-      return;
-    }
-
-    currentIndex++;
-
-    if (currentIndex >= wishes.length) {
-      currentIndex = 0;
-    }
-
-    showWish(currentIndex);
-  });
-}
-
-if (likeButton) {
   likeButton.addEventListener("click", async () => {
-    if (wishes.length === 0) {
-      return;
-    }
-
-    const wish = wishes[currentIndex];
-
-    if (!wish || !wish.id) {
-      return;
-    }
-
     const likeRef = ref(
       database,
       `wishes/${wish.id}/likes`
     );
 
     try {
-      await runTransaction(likeRef, (currentLikes) => {
+      await runTransaction(likeRef, currentLikes => {
         return (currentLikes || 0) + 1;
       });
     } catch (error) {
       console.error(error);
-
       alert("いいねに失敗しました");
     }
   });
 }
 
+function escapeHTML(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+onValue(
+  wishesRef,
+  snapshot => {
+    const data = snapshot.val();
+
+    wishes = [];
+
+    if (data) {
+      Object.entries(data).forEach(([id, wish]) => {
+        wishes.push({
+          id,
+          ...wish
+        });
+      });
+    }
+
+    const sortedWishes = getSortedWishes();
+
+    if (currentIndex >= sortedWishes.length) {
+      currentIndex = 0;
+    }
+
+    updateTotalLikes();
+    renderWish();
+
+    status.textContent = "";
+  },
+  error => {
+    console.error(error);
+
+    carousel.innerHTML = `
+      <div class="loading">
+        Firebaseへの接続に失敗しました。<br>
+        ${escapeHTML(error.message)}
+      </div>
+    `;
+
+    status.textContent =
+      "読み込みに失敗しました：" + error.message;
+  }
+);
+
+form.addEventListener("submit", async event => {
+  event.preventDefault();
+
+  const name = nameInput.value.trim();
+  const category = categoryInput.value;
+  const wish = wishInput.value.trim();
+
+  if (!name || !category || !wish) {
+    status.textContent = "すべて入力してください。";
+    return;
+  }
+
+  status.textContent = "願いごとを届けています…";
+
+  try {
+    await push(wishesRef, {
+      name,
+      category,
+      wish,
+      likes: 0,
+      createdAt: Date.now()
+    });
+
+    form.reset();
+
+    status.textContent =
+      "願いごとを短冊に込めました 🎋";
+
+    currentIndex = 0;
+  } catch (error) {
+    console.error(error);
+
+    status.textContent =
+      "投稿できませんでした：" + error.message;
+  }
+});
+
+prevButton.addEventListener("click", () => {
+  const sortedWishes = getSortedWishes();
+
+  if (sortedWishes.length === 0) {
+    return;
+  }
+
+  currentIndex--;
+
+  if (currentIndex < 0) {
+    currentIndex = sortedWishes.length - 1;
+  }
+
+  renderWish();
+});
+
+nextButton.addEventListener("click", () => {
+  const sortedWishes = getSortedWishes();
+
+  if (sortedWishes.length === 0) {
+    return;
+  }
+
+  currentIndex++;
+
+  if (currentIndex >= sortedWishes.length) {
+    currentIndex = 0;
+  }
+
+  renderWish();
+});
+
+sortButtons.forEach(button => {
+  button.addEventListener("click", () => {
+    sortButtons.forEach(item => {
+      item.classList.remove("active");
+    });
+
+    button.classList.add("active");
+
+    currentSort = button.dataset.sort;
+    currentIndex = 0;
+
+    renderWish();
+  });
+});
+
 let touchStartX = 0;
 let touchEndX = 0;
 
-if (card) {
-  card.addEventListener(
-    "touchstart",
-    (event) => {
-      touchStartX = event.changedTouches[0].screenX;
-    },
-    {
-      passive: true
+carousel.addEventListener(
+  "touchstart",
+  event => {
+    touchStartX =
+      event.changedTouches[0].screenX;
+  },
+  {
+    passive: true
+  }
+);
+
+carousel.addEventListener(
+  "touchend",
+  event => {
+    touchEndX =
+      event.changedTouches[0].screenX;
+
+    const distance =
+      touchEndX - touchStartX;
+
+    if (Math.abs(distance) < 50) {
+      return;
     }
-  );
 
-  card.addEventListener(
-    "touchend",
-    (event) => {
-      touchEndX = event.changedTouches[0].screenX;
+    const sortedWishes = getSortedWishes();
 
-      const swipeDistance =
-        touchEndX - touchStartX;
-
-      if (Math.abs(swipeDistance) < 50) {
-        return;
-      }
-
-      if (swipeDistance < 0) {
-        currentIndex++;
-
-        if (currentIndex >= wishes.length) {
-          currentIndex = 0;
-        }
-      } else {
-        currentIndex--;
-
-        if (currentIndex < 0) {
-          currentIndex = wishes.length - 1;
-        }
-      }
-
-      showWish(currentIndex);
-    },
-    {
-      passive: true
+    if (sortedWishes.length === 0) {
+      return;
     }
-  );
-}
 
-showWish(currentIndex);
+    if (distance < 0) {
+      currentIndex++;
+
+      if (currentIndex >= sortedWishes.length) {
+        currentIndex = 0;
+      }
+    } else {
+      currentIndex--;
+
+      if (currentIndex < 0) {
+        currentIndex = sortedWishes.length - 1;
+      }
+    }
+
+    renderWish();
+  },
+  {
+    passive: true
+  }
+);

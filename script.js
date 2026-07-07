@@ -1,74 +1,257 @@
-import {initializeApp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
-import {getFirestore,collection,addDoc,onSnapshot,doc,updateDoc,increment,serverTimestamp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 
-const firebaseConfig={apiKey:"AIzaSyDsRu7HzIl2_u334EfTrOCPqaIlphgXtZw",authDomain:"nijigaku-tanabata.firebaseapp.com",projectId:"nijigaku-tanabata",storageBucket:"nijigaku-tanabata.firebasestorage.app",messagingSenderId:"959354845309",appId:"1:959354845309:web:109ac828f5a9631f89d914",measurementId:"G-7M0L137SGH"};
-const app=initializeApp(firebaseConfig);
-const db=getFirestore(app);
-const wishesRef=collection(db,"activityWishes");
-const carousel=document.querySelector("#carousel");
-const totalLikes=document.querySelector("#totalLikes");
-const form=document.querySelector("#wishForm");
-const status=document.querySelector("#status");
-const prevButton=document.querySelector("#prev");
-const nextButton=document.querySelector("#next");
-let wishes=[],sortMode="new",currentIndex=0,scrollTimer=null;
+import {
+  getDatabase,
+  ref,
+  push,
+  onValue,
+  runTransaction
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-function likedKey(id){return `tanabata-activity-liked-${id}`}
-function escapeHtml(value=""){const div=document.createElement("div");div.textContent=value;return div.innerHTML}
-function getSortedWishes(){return [...wishes].sort((a,b)=>sortMode==="likes"?(b.likes||0)-(a.likes||0):(b.createdMs||0)-(a.createdMs||0))}
-function scrollToCurrent(smooth=true){const cards=carousel.querySelectorAll(".wish-card");if(!cards.length||!cards[currentIndex])return;cards[currentIndex].scrollIntoView({behavior:smooth?"smooth":"auto",inline:"center",block:"nearest"})}
-function render(){
- const data=getSortedWishes();
- totalLikes.textContent=wishes.reduce((n,w)=>n+(w.likes||0),0).toLocaleString("ja-JP");
- if(!data.length){carousel.innerHTML='<div class="empty">まだ願いごとがありません。<br>最初の短冊を書いてみよう。</div>';return}
- if(currentIndex>=data.length)currentIndex=0;
- carousel.innerHTML=data.map(w=>{
-  const liked=localStorage.getItem(likedKey(w.id))==="1";
-  return `<article class="wish-card"><h3>${escapeHtml(w.name||"")}</h3><span class="grade">${escapeHtml(w.grade||"")}</span><div class="wish-text">${escapeHtml(w.wish||"").trim()}</div><button class="like ${liked?"liked":""}" data-id="${w.id}" ${liked?"disabled":""}>♥ ${w.likes||0}</button></article>`
- }).join("");
- requestAnimationFrame(()=>scrollToCurrent(false))
+const firebaseConfig = {
+  apiKey: "AIzaSyAwDf9GT864-kqW4J5RtaCE5mlQgmYJS8g",
+  authDomain: "tanabata-wishes.firebaseapp.com",
+  databaseURL:
+    "https://tanabata-wishes-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "tanabata-wishes",
+  storageBucket: "tanabata-wishes.firebasestorage.app",
+  messagingSenderId: "605416394989",
+  appId: "1:605416394989:web:f312df5887bd38e656bce4"
+};
+
+const app = initializeApp(firebaseConfig);
+const database = getDatabase(app);
+
+const wishesRef = ref(database, "wishes");
+
+let wishes = [];
+let currentIndex = 0;
+
+const form = document.getElementById("wishForm");
+const nameInput = document.getElementById("name");
+const categoryInput = document.getElementById("grade");
+const wishInput = document.getElementById("wish");
+
+const card = document.getElementById("wishCard");
+const cardName = document.getElementById("cardName");
+const cardGrade = document.getElementById("cardGrade");
+const cardWish = document.getElementById("cardWish");
+
+const likeButton = document.getElementById("likeButton");
+const likeCount = document.getElementById("likeCount");
+
+const prevButton = document.getElementById("prevButton");
+const nextButton = document.getElementById("nextButton");
+
+function showWish(index) {
+  if (wishes.length === 0) {
+    cardName.textContent = "七夕";
+    cardGrade.textContent = "願いごと";
+    cardWish.textContent = "最初の願いごとを書いてみよう";
+    likeCount.textContent = "0";
+
+    if (likeButton) {
+      likeButton.disabled = true;
+    }
+
+    return;
+  }
+
+  if (index < 0) {
+    currentIndex = wishes.length - 1;
+  } else if (index >= wishes.length) {
+    currentIndex = 0;
+  } else {
+    currentIndex = index;
+  }
+
+  const wish = wishes[currentIndex];
+
+  cardName.textContent = wish.name || "匿名";
+  cardGrade.textContent = wish.category || wish.grade || "その他";
+  cardWish.textContent = wish.wish || "";
+  likeCount.textContent = wish.likes || 0;
+
+  if (likeButton) {
+    likeButton.disabled = false;
+  }
+
+  if (card) {
+    card.classList.remove("card-change");
+
+    void card.offsetWidth;
+
+    card.classList.add("card-change");
+  }
 }
-function goNext(){const data=getSortedWishes();if(!data.length)return;currentIndex=(currentIndex+1)%data.length;scrollToCurrent(true)}
-function goPrev(){const data=getSortedWishes();if(!data.length)return;currentIndex=(currentIndex-1+data.length)%data.length;scrollToCurrent(true)}
 
-carousel.addEventListener("scroll",()=>{
- clearTimeout(scrollTimer);
- scrollTimer=setTimeout(()=>{
-  const cards=[...carousel.querySelectorAll(".wish-card")];if(!cards.length)return;
-  const center=carousel.scrollLeft+carousel.clientWidth/2;
-  let closest=0,distance=Infinity;
-  cards.forEach((card,index)=>{const d=Math.abs(center-(card.offsetLeft+card.offsetWidth/2));if(d<distance){distance=d;closest=index}});
-  currentIndex=closest;
-  if(currentIndex===cards.length-1&&carousel.scrollLeft+carousel.clientWidth>=carousel.scrollWidth-5){setTimeout(()=>{currentIndex=0;scrollToCurrent(false)},250)}
- },150)
+onValue(wishesRef, (snapshot) => {
+  const data = snapshot.val();
+
+  wishes = [];
+
+  if (data) {
+    Object.entries(data).forEach(([id, wish]) => {
+      wishes.push({
+        id,
+        ...wish
+      });
+    });
+  }
+
+  wishes.sort((a, b) => {
+    return (a.createdAt || 0) - (b.createdAt || 0);
+  });
+
+  if (currentIndex >= wishes.length) {
+    currentIndex = 0;
+  }
+
+  showWish(currentIndex);
 });
 
-onSnapshot(wishesRef,snapshot=>{
- wishes=snapshot.docs.map(document=>{const data=document.data();return{id:document.id,...data,createdMs:data.createdAt?.toMillis?.()||0}});
- render()
-},error=>{console.error(error);carousel.innerHTML=`<div class="empty">Firebaseへの接続に失敗しました。<br>${escapeHtml(error.message)}</div>`});
+if (form) {
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
 
-carousel.addEventListener("click",async event=>{
- const button=event.target.closest(".like");if(!button||button.disabled)return;
- const id=button.dataset.id;button.disabled=true;localStorage.setItem(likedKey(id),"1");
- try{await updateDoc(doc(db,"activityWishes",id),{likes:increment(1)})}
- catch(error){localStorage.removeItem(likedKey(id));button.disabled=false;alert("いいねに失敗しました")}
-});
+    const name = nameInput.value.trim();
+    const category = categoryInput.value;
+    const wish = wishInput.value.trim();
 
-form.addEventListener("submit",async event=>{
- event.preventDefault();
- const name=document.querySelector("#name").value.trim();
- const grade=document.querySelector("#grade").value;
- const wish=document.querySelector("#wish").value.trim();
- if(!name||!grade||!wish){status.textContent="すべて入力してください。";return}
- status.textContent="投稿中…";
- try{await addDoc(wishesRef,{name,grade,wish,likes:0,createdAt:serverTimestamp()});form.reset();currentIndex=0;status.textContent="願いごとを投稿しました ✨"}
- catch(error){console.error(error);status.textContent=`投稿できませんでした：${error.message}`}
-});
+    if (!name || !category || !wish) {
+      alert("すべて入力してください");
+      return;
+    }
 
-document.querySelectorAll(".sort button").forEach(button=>button.addEventListener("click",()=>{
- document.querySelectorAll(".sort button").forEach(item=>item.classList.remove("active"));
- button.classList.add("active");sortMode=button.dataset.sort;currentIndex=0;render()
-}));
-prevButton?.addEventListener("click",goPrev);
-nextButton?.addEventListener("click",goNext);
+    try {
+      await push(wishesRef, {
+        name,
+        category,
+        wish,
+        likes: 0,
+        createdAt: Date.now()
+      });
+
+      form.reset();
+
+      alert("願いごとを短冊に込めました 🎋");
+    } catch (error) {
+      console.error(error);
+
+      alert(
+        "願いごとの投稿に失敗しました。もう一度試してください。"
+      );
+    }
+  });
+}
+
+if (prevButton) {
+  prevButton.addEventListener("click", () => {
+    if (wishes.length === 0) {
+      return;
+    }
+
+    currentIndex--;
+
+    if (currentIndex < 0) {
+      currentIndex = wishes.length - 1;
+    }
+
+    showWish(currentIndex);
+  });
+}
+
+if (nextButton) {
+  nextButton.addEventListener("click", () => {
+    if (wishes.length === 0) {
+      return;
+    }
+
+    currentIndex++;
+
+    if (currentIndex >= wishes.length) {
+      currentIndex = 0;
+    }
+
+    showWish(currentIndex);
+  });
+}
+
+if (likeButton) {
+  likeButton.addEventListener("click", async () => {
+    if (wishes.length === 0) {
+      return;
+    }
+
+    const wish = wishes[currentIndex];
+
+    if (!wish || !wish.id) {
+      return;
+    }
+
+    const likeRef = ref(
+      database,
+      `wishes/${wish.id}/likes`
+    );
+
+    try {
+      await runTransaction(likeRef, (currentLikes) => {
+        return (currentLikes || 0) + 1;
+      });
+    } catch (error) {
+      console.error(error);
+
+      alert("いいねに失敗しました");
+    }
+  });
+}
+
+let touchStartX = 0;
+let touchEndX = 0;
+
+if (card) {
+  card.addEventListener(
+    "touchstart",
+    (event) => {
+      touchStartX = event.changedTouches[0].screenX;
+    },
+    {
+      passive: true
+    }
+  );
+
+  card.addEventListener(
+    "touchend",
+    (event) => {
+      touchEndX = event.changedTouches[0].screenX;
+
+      const swipeDistance =
+        touchEndX - touchStartX;
+
+      if (Math.abs(swipeDistance) < 50) {
+        return;
+      }
+
+      if (swipeDistance < 0) {
+        currentIndex++;
+
+        if (currentIndex >= wishes.length) {
+          currentIndex = 0;
+        }
+      } else {
+        currentIndex--;
+
+        if (currentIndex < 0) {
+          currentIndex = wishes.length - 1;
+        }
+      }
+
+      showWish(currentIndex);
+    },
+    {
+      passive: true
+    }
+  );
+}
+
+showWish(currentIndex);

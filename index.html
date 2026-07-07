@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>七夕の願いごと</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="app">
+<header>
+<div class="bamboo">🎋</div>
+<h1>七夕の願いごと</h1>
+<p>夜空に願いを。<br>みんなの短冊を覗いてみよう。</p>
+<div class="total">♥ みんなのいいね <strong id="totalLikes">0</strong></div>
+</header>
+<section class="carousel-wrap">
+<button id="prev" class="arrow left" type="button">‹</button>
+<div id="carousel" class="carousel"><div class="loading">願いごとを読み込んでいます…</div></div>
+<button id="next" class="arrow right" type="button">›</button>
+</section>
+<p class="hint">← 横にスワイプして、みんなの願いを見てみよう →<br>気になる願いには ♥ を送れます</p>
+<div class="sort">
+<button class="active" type="button" data-sort="new">新着順</button>
+<button type="button" data-sort="likes">いいね順</button>
+</div>
+<section class="event">
+<strong>🎋 七夕限定</strong>
+<span>みんなで願いごとを書いてみよう。</span>
+<span>投稿された願いは、このページにリアルタイムで表示されます。</span>
+</section>
+<section class="form-card">
+<h2>短冊を書く</h2>
+<form id="wishForm">
+<label>名前<input id="name" type="text" maxlength="30" placeholder="名前を入力" required></label>
+<label>カテゴリー<select id="grade" required>
+<option value="">カテゴリーを選択</option>
+<option value="活動者">活動者</option>
+<option value="リスナー">リスナー</option>
+<option value="その他">その他</option>
+</select></label>
+<label>願いごと<textarea id="wish" maxlength="150" placeholder="あなたの願いごとを書いてください" required></textarea></label>
+<button type="submit">願いを短冊に込める</button>
+</form>
+<p id="status"></p>
+</section>
+</main>
+<script type="module" src="script.js"></script>
+</body>
+</html>
